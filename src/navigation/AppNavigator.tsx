@@ -1,335 +1,349 @@
+// src/navigation/AppNavigator.tsx - VERSIÓN CORREGIDA SIN DUPLICADOS
 import React from 'react';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
-import { TouchableOpacity, Text, StyleSheet, View } from 'react-native';
-import { useAuth } from '../context/AuthContext';
-import { usePermissions } from '../hooks/usePermissions';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { TouchableOpacity, View, Text, Platform } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
-// Importar pantallas
-import { HomeScreen } from '../screens/HomeScreen';
-import { RecipesScreen } from '../screens/RecipesScreen';
-import { RecipeDetailScreen } from '../screens/RecipeDetailScreen';
-import { CreateRecipeScreen } from '../screens/CreateRecipeScreen';
-import ProfileScreen from '../screens/ProfileScreen';
+// Contexts
+import { useAuth } from '../context/AuthContext';
+
+// ✅ SCREENS - NAMED IMPORTS
 import { LoginScreen } from '../screens/LoginScreen';
 import { RegisterScreen } from '../screens/RegisterScreen';
-import { CommunityRecipesScreen } from '../screens/CommunityRecipesScreen';
+import { HomeScreen } from '../screens/HomeScreen';
+import { RecipeDetailScreen } from '../screens/RecipeDetailScreen';
+import { CreateRecipeScreen } from '../screens/CreateRecipeScreen';
+import { ProfileScreen } from '../screens/ProfileScreen';
 import { MyRecipesScreen } from '../screens/MyRecipesScreen';
+import { RecipesScreen } from '../screens/RecipesScreen';
+import { CommunityRecipesScreen } from '../screens/CommunityRecipesScreen';
 import { AdminScreen } from '../screens/AdminScreen';
-import { RootStackParamList } from '../types';
+import { UserManagementScreen } from '../screens/UserManagementScreen';
+import { ContentModerationScreen } from '../screens/ContentModerationScreen';
+import { RecipeManagementScreen } from '../screens/RecipeManagementScreen';
+import { EditRecipeScreen } from '../screens/EditRecipeScreen'; // ✅ IMPORT CORREGIDO
 
-// Crear navegadores
+// ⚠️ PANTALLAS QUE NO EXISTEN - Placeholders actualizados
+const FavoritesScreen = () => (
+  <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+    <Text>Pantalla de Favoritos (Próximamente)</Text>
+  </View>
+);
+
+const SearchScreen = () => (
+  <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+    <Text>Pantalla de Búsqueda (Próximamente)</Text>
+  </View>
+);
+
+// ❌ ELIMINAR el duplicado de EditRecipeScreen que estaba aquí
+
+const PostDetailScreen = () => (
+  <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+    <Text>Detalle de Post (Próximamente)</Text>
+  </View>
+);
+
+const CreatePostScreen = () => (
+  <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+    <Text>Crear Post (Próximamente)</Text>
+  </View>
+);
+
+const EditPostScreen = () => (
+  <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+    <Text>Editar Post (Próximamente)</Text>
+  </View>
+);
+
+const EditProfileScreen = () => (
+  <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+    <Text>Editar Perfil (Próximamente)</Text>
+  </View>
+);
+
+const SettingsScreen = () => (
+  <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+    <Text>Configuración (Próximamente)</Text>
+  </View>
+);
+
+const ReportsScreen = () => (
+  <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+    <Text>Reportes (Próximamente)</Text>
+  </View>
+);
+
+// Types
+export type RootStackParamList = {
+  Auth: undefined;
+  MainTabs: undefined;
+  RecipeDetail: { recipeId: string };
+  CreateRecipe: undefined;
+  EditRecipe: { recipeId: string }; // ✅ SOLO UNA VEZ
+  Search: undefined;
+  EditProfile: undefined;
+  MyRecipes: undefined;
+  Settings: undefined;
+  PostDetail: { postId: string };
+  CreatePost: undefined;
+  EditPost: { postId: string };
+  AdminDashboard: undefined;
+  UserManagement: undefined;
+  ContentModeration: undefined;
+  Reports: undefined;
+  Recipes: undefined;
+  RecipeManagement: undefined;
+  // ❌ ELIMINAR el EditRecipe duplicado que estaba aquí
+};
+
+export type MainTabParamList = {
+  Home: undefined;
+  Favorites: undefined;
+  Community: undefined;
+  Profile: undefined;
+  Recipes: undefined;
+};
+
+// Stacks y Tabs
 const Stack = createStackNavigator<RootStackParamList>();
-const Tab = createBottomTabNavigator();
+const Tab = createBottomTabNavigator<MainTabParamList>();
+const AuthStack = createStackNavigator();
 
-// Props para el AppNavigator
+// Props interface
 interface AppNavigatorProps {
   onLanguagePress: () => void;
   currentLanguage: string;
 }
 
-// Componente de icono personalizado con emojis
-const TabIcon: React.FC<{ name: string; color: string; focused: boolean }> = ({ 
-  name, 
-  color, 
-  focused 
-}) => {
-  const getIcon = () => {
-    switch (name) {
-      case 'Home':
-        return '🏠';
-      case 'Recipes':
-        return '📖';
-      case 'CreateRecipe':
-        return '➕';
-      case 'Profile':
-        return '👤';
-      case 'Admin':
-        return '👑';
-      default:
-        return '●';
-    }
-  };
-
-  const getLabel = () => {
-    switch (name) {
-      case 'Home':
-        return 'Inicio';
-      case 'Recipes':
-        return 'Recetas';
-      case 'CreateRecipe':
-        return 'Crear';
-      case 'Profile':
-        return 'Perfil';
-      case 'Admin':
-        return 'Admin';
-      default:
-        return name;
-    }
-  };
-
+// ============================================================================
+// AUTH STACK - CORREGIDO CON id: undefined
+// ============================================================================
+const AuthNavigator = () => {
   return (
-    <View style={styles.tabContainer}>
-      <Text style={[styles.tabIcon, { color }]}>{getIcon()}</Text>
-      <Text style={[styles.tabLabel, { color }, focused && styles.tabLabelFocused]}>
-        {getLabel()}
-      </Text>
-      {focused && <View style={[styles.tabIndicator, { backgroundColor: color }]} />}
-    </View>
+    <AuthStack.Navigator
+      id={undefined}
+      screenOptions={{
+        headerShown: false,
+        cardStyle: { backgroundColor: '#fff' },
+      }}
+    >
+      <AuthStack.Screen name="Login" component={LoginScreen} />
+      <AuthStack.Screen name="Register" component={RegisterScreen} />
+    </AuthStack.Navigator>
   );
 };
 
-// Navegador de tabs principal (SOLO para usuarios autenticados)
-const MainTabNavigator = () => {
-  const { isAdmin } = usePermissions();
-
+// ============================================================================
+// MAIN TABS - CORREGIDO CON id: undefined
+// ============================================================================
+const MainTabs = () => {
   return (
     <Tab.Navigator
+      id={undefined}
       screenOptions={({ route }) => ({
-        tabBarActiveTintColor: '#3B82F6',
-        tabBarInactiveTintColor: '#6B7280',
+        headerShown: false,
+        tabBarActiveTintColor: '#FF6B6B',
+        tabBarInactiveTintColor: '#999',
         tabBarStyle: {
-          backgroundColor: '#FFFFFF',
-          borderTopWidth: 1,
-          borderTopColor: '#E5E7EB',
-          height: 70,
-          paddingBottom: 10,
+          height: Platform.OS === 'ios' ? 88 : 60,
+          paddingBottom: Platform.OS === 'ios' ? 20 : 8,
           paddingTop: 8,
+          borderTopWidth: 1,
+          borderTopColor: '#E5E5E5',
+          backgroundColor: '#fff',
+          elevation: 8,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: -2 },
+          shadowOpacity: 0.1,
+          shadowRadius: 4,
         },
-        tabBarIcon: ({ color, focused }) => (
-          <TabIcon 
-            name={route.name} 
-            color={color} 
-            focused={focused} 
-          />
-        ),
-        tabBarLabel: () => null,
-        headerStyle: {
-          backgroundColor: '#3B82F6',
+        tabBarLabelStyle: {
+          fontSize: 12,
+          fontWeight: '600',
         },
-        headerTintColor: '#FFFFFF',
-        headerTitleStyle: {
-          fontWeight: 'bold',
+        tabBarIcon: ({ focused, color, size }) => {
+          let iconName: keyof typeof MaterialCommunityIcons.glyphMap;
+
+          switch (route.name) {
+            case 'Home':
+              iconName = focused ? 'home' : 'home-outline';
+              break;
+            case 'Favorites':
+              iconName = focused ? 'heart' : 'heart-outline';
+              break;
+            case 'Recipes':
+              iconName = focused ? 'book-open' : 'book-open-outline';
+              break;
+            case 'Community':
+              iconName = focused ? 'forum' : 'forum-outline';
+              break;
+            case 'Profile':
+              iconName = focused ? 'account' : 'account-outline';
+              break;
+            default:
+              iconName = 'help-circle-outline';
+          }
+
+          return (
+            <View style={{
+              alignItems: 'center',
+              justifyContent: 'center',
+              top: Platform.OS === 'ios' ? 0 : 0,
+            }}>
+              <MaterialCommunityIcons name={iconName} size={size} color={color} />
+            </View>
+          );
         },
       })}
     >
-      <Tab.Screen
-        name="Home"
+      <Tab.Screen 
+        name="Home" 
         component={HomeScreen}
         options={{
-          title: 'Inicio',
+          tabBarLabel: 'Inicio',
         }}
       />
-      <Tab.Screen
-        name="Recipes"
+      <Tab.Screen 
+        name="Favorites" 
+        component={FavoritesScreen}
+        options={{
+          tabBarLabel: 'Favoritos',
+        }}
+      />
+      <Tab.Screen 
+        name="Recipes" 
         component={RecipesScreen}
         options={{
-          title: 'Recetas',
+          tabBarLabel: 'Recetas',
         }}
       />
-      <Tab.Screen
-        name="CreateRecipe"
-        component={CreateRecipeScreen}
+      <Tab.Screen 
+        name="Community" 
+        component={CommunityRecipesScreen}
         options={{
-          title: 'Crear Receta',
+          tabBarLabel: 'Comunidad',
         }}
       />
-      {/* Tab de Admin solo para administradores */}
-      {isAdmin && (
-        <Tab.Screen
-          name="Admin"
-          component={AdminScreen}
-          options={{
-            title: 'Administración',
-          }}
-        />
-      )}
-      <Tab.Screen
-        name="Profile"
+      <Tab.Screen 
+        name="Profile" 
         component={ProfileScreen}
         options={{
-          title: 'Mi Perfil',
+          tabBarLabel: 'Perfil',
         }}
       />
     </Tab.Navigator>
   );
 };
 
-// Componente del botón de idioma
-const LanguageButton: React.FC<{ onPress: () => void; currentLanguage: string }> = ({ 
-  onPress, 
-  currentLanguage 
+// ============================================================================
+// HEADER COMPONENTS
+// ============================================================================
+interface HeaderProps {
+  title: string;
+  showBack?: boolean;
+  navigation: any;
+  showLanguage?: boolean;
+  onLanguagePress?: () => void;
+  currentLanguage?: string;
+  showAdmin?: boolean;
+}
+
+const CustomHeader: React.FC<HeaderProps> = ({ 
+  title, 
+  showBack = false, 
+  navigation,
+  showLanguage = false,
+  onLanguagePress,
+  currentLanguage = 'es',
+  showAdmin = false
 }) => {
-  const getLanguageLabel = (lang: string) => {
-    const languages: { [key: string]: string } = {
-      'es': 'ES',
-      'en': 'EN',
-      'fr': 'FR',
-      'it': 'IT',
-      'pt': 'PT'
-    };
-    return languages[lang] || 'ES';
-  };
-
-  const getLanguageFlag = (lang: string) => {
-    const flags: { [key: string]: string } = {
-      'es': '🇪🇸',
-      'en': '🇺🇸',
-      'fr': '🇫🇷',
-      'it': '🇮🇹',
-      'pt': '🇵🇹'
-    };
-    return flags[lang] || '🇪🇸';
-  };
+  const { isAdmin } = useAuth();
 
   return (
-    <TouchableOpacity 
-      onPress={onPress}
-      style={styles.languageButton}
-    >
-      <Text style={styles.languageFlag}>{getLanguageFlag(currentLanguage)}</Text>
-      <Text style={styles.languageText}>{getLanguageLabel(currentLanguage)}</Text>
-    </TouchableOpacity>
+    <View style={{
+      height: Platform.OS === 'ios' ? 100 : 60,
+      backgroundColor: '#FF6B6B',
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingTop: Platform.OS === 'ios' ? 44 : 0,
+      elevation: 4,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.2,
+      shadowRadius: 4,
+    }}>
+      {/* Botón de retroceso */}
+      <View style={{ width: 40 }}>
+        {showBack && (
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            style={{
+              padding: 8,
+            }}
+          >
+            <MaterialCommunityIcons name="arrow-left" size={24} color="#fff" />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Título */}
+      <Text style={{
+        fontSize: 20,
+        fontWeight: 'bold',
+        color: '#fff',
+        flex: 1,
+        textAlign: 'center',
+      }}>
+        {title}
+      </Text>
+
+      {/* Botones de acciones (idioma y admin) */}
+      <View style={{ 
+        flexDirection: 'row', 
+        alignItems: 'center',
+        width: 40,
+        justifyContent: 'flex-end'
+      }}>
+        {showLanguage && onLanguagePress && (
+          <TouchableOpacity
+            onPress={onLanguagePress}
+            style={{
+              padding: 8,
+              marginRight: showAdmin && isAdmin ? 8 : 0,
+            }}
+          >
+            <Text style={{
+              fontSize: 16,
+              fontWeight: 'bold',
+              color: '#fff',
+            }}>
+              {currentLanguage.toUpperCase()}
+            </Text>
+          </TouchableOpacity>
+        )}
+
+        {showAdmin && isAdmin && (
+          <TouchableOpacity
+            onPress={() => navigation.navigate('AdminDashboard')}
+            style={{
+              padding: 8,
+            }}
+          >
+            <MaterialCommunityIcons name="shield-crown" size={24} color="#FFD700" />
+          </TouchableOpacity>
+        )}
+      </View>
+    </View>
   );
 };
 
-// Navegador para usuarios NO autenticados
-const AuthStackNavigator = () => {
-  return (
-    <Stack.Navigator
-      screenOptions={{
-        headerStyle: {
-          backgroundColor: '#3B82F6',
-        },
-        headerTintColor: '#FFFFFF',
-        headerTitleStyle: {
-          fontWeight: 'bold',
-        },
-      }}
-    >
-      <Stack.Screen 
-        name="Login" 
-        component={LoginScreen}
-        options={{
-          title: 'Iniciar Sesión',
-          headerShown: true,
-        }}
-      />
-      <Stack.Screen 
-        name="Register" 
-        component={RegisterScreen}
-        options={{
-          title: 'Registrarse',
-          headerShown: true,
-        }}
-      />
-    </Stack.Navigator>
-  );
-};
-
-// Navegador para usuarios autenticados
-const AppStackNavigator = ({ onLanguagePress, currentLanguage }: { 
-  onLanguagePress: () => void; 
-  currentLanguage: string;
-}) => {
-  return (
-    <Stack.Navigator
-      screenOptions={{
-        headerStyle: {
-          backgroundColor: '#3B82F6',
-        },
-        headerTintColor: '#FFFFFF',
-        headerTitleStyle: {
-          fontWeight: 'bold',
-          fontSize: 18,
-        },
-        headerBackTitle: 'Atrás',
-      }}
-    >
-      <Stack.Screen 
-        name="Main" 
-        component={MainTabNavigator}
-        options={{
-          headerShown: false,
-        }}
-      />
-
-      <Stack.Screen 
-        name="RecipeDetail" 
-        component={RecipeDetailScreen}
-        options={{
-          title: 'Detalle de Receta',
-          headerRight: () => (
-            <LanguageButton 
-              onPress={onLanguagePress} 
-              currentLanguage={currentLanguage} 
-            />
-          ),
-        }}
-      />
-
-      {/* Pantallas adicionales para recetas de comunidad */}
-      <Stack.Screen 
-        name="CommunityRecipes" 
-        component={CommunityRecipesScreen}
-        options={{
-          title: 'Recetas de la Comunidad',
-          headerRight: () => (
-            <LanguageButton 
-              onPress={onLanguagePress} 
-              currentLanguage={currentLanguage} 
-            />
-          ),
-        }}
-      />
-
-      <Stack.Screen 
-        name="MyRecipes" 
-        component={MyRecipesScreen}
-        options={{
-          title: 'Mis Recetas',
-          headerRight: () => (
-            <LanguageButton 
-              onPress={onLanguagePress} 
-              currentLanguage={currentLanguage} 
-            />
-          ),
-        }}
-      />
-
-      <Stack.Screen 
-        name="CreateRecipe" 
-        component={CreateRecipeScreen}
-        options={{
-          title: 'Crear Receta',
-          headerRight: () => (
-            <LanguageButton 
-              onPress={onLanguagePress} 
-              currentLanguage={currentLanguage} 
-            />
-          ),
-        }}
-      />
-
-      {/* Pantalla de administración */}
-      <Stack.Screen 
-        name="Admin" 
-        component={AdminScreen}
-        options={{
-          title: 'Panel de Administración',
-          headerRight: () => (
-            <LanguageButton 
-              onPress={onLanguagePress} 
-              currentLanguage={currentLanguage} 
-            />
-          ),
-        }}
-      />
-    </Stack.Navigator>
-  );
-};
-
-// Navegador principal de la aplicación
+// ============================================================================
+// MAIN NAVIGATOR - COMPLETO Y CORREGIDO CON id: undefined
+// ============================================================================
 export const AppNavigator: React.FC<AppNavigatorProps> = ({ 
   onLanguagePress, 
   currentLanguage 
@@ -338,79 +352,274 @@ export const AppNavigator: React.FC<AppNavigatorProps> = ({
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <Text style={styles.loadingText}>Cargando...</Text>
+      <View style={{ 
+        flex: 1, 
+        justifyContent: 'center', 
+        alignItems: 'center',
+        backgroundColor: '#fff'
+      }}>
+        <Text style={{ fontSize: 18, color: '#666' }}>Cargando...</Text>
       </View>
     );
   }
 
+  if (!isAuthenticated) {
+    return <AuthNavigator />;
+  }
+
   return (
-    <>
-      {isAuthenticated ? (
-        <AppStackNavigator 
-          onLanguagePress={onLanguagePress} 
-          currentLanguage={currentLanguage} 
-        />
-      ) : (
-        <AuthStackNavigator />
-      )}
-    </>
+    <Stack.Navigator
+      id={undefined}
+      screenOptions={{
+        cardStyle: { backgroundColor: '#fff' },
+      }}
+    >
+      {/* Main Tabs */}
+      <Stack.Screen 
+        name="MainTabs" 
+        component={MainTabs}
+        options={{
+          headerShown: false,
+        }}
+      />
+
+      {/* Recipe Screens */}
+      <Stack.Screen 
+        name="RecipeDetail" 
+        component={RecipeDetailScreen}
+        options={({ navigation }) => ({
+          header: () => (
+            <CustomHeader 
+              title="Detalle de Receta"
+              showBack={true}
+              navigation={navigation}
+            />
+          ),
+        })}
+      />
+
+      <Stack.Screen 
+        name="CreateRecipe" 
+        component={CreateRecipeScreen}
+        options={({ navigation }) => ({
+          header: () => (
+            <CustomHeader 
+              title="Crear Receta"
+              showBack={true}
+              navigation={navigation}
+            />
+          ),
+        })}
+      />
+
+      {/* ✅ PANTALLA DE EDICIÓN - SOLO UNA VEZ */}
+      <Stack.Screen 
+        name="EditRecipe" 
+        component={EditRecipeScreen}
+        options={({ navigation }) => ({
+          header: () => (
+            <CustomHeader 
+              title="Editar Receta"
+              showBack={true}
+              navigation={navigation}
+            />
+          ),
+        })}
+      />
+
+      {/* ✅ PANTALLA DE GESTIÓN DE RECETAS */}
+      <Stack.Screen 
+        name="RecipeManagement" 
+        component={RecipeManagementScreen}
+        options={({ navigation }) => ({
+          header: () => (
+            <CustomHeader 
+              title="Gestión de Recetas"
+              showBack={true}
+              navigation={navigation}
+            />
+          ),
+        })}
+      />
+
+      {/* ✅ AGREGADO: Pantalla Recipes para evitar errores de navegación */}
+      <Stack.Screen 
+        name="Recipes" 
+        component={RecipesScreen}
+        options={({ navigation }) => ({
+          header: () => (
+            <CustomHeader 
+              title="Todas las Recetas"
+              showBack={true}
+              navigation={navigation}
+              showLanguage={true}
+              onLanguagePress={onLanguagePress}
+              currentLanguage={currentLanguage}
+            />
+          ),
+        })}
+      />
+
+      {/* Search Screen */}
+      <Stack.Screen 
+        name="Search" 
+        component={SearchScreen}
+        options={({ navigation }) => ({
+          header: () => (
+            <CustomHeader 
+              title="Buscar Recetas"
+              showBack={true}
+              navigation={navigation}
+              showLanguage={true}
+              onLanguagePress={onLanguagePress}
+              currentLanguage={currentLanguage}
+            />
+          ),
+        })}
+      />
+
+      {/* Profile Screens */}
+      <Stack.Screen 
+        name="EditProfile" 
+        component={EditProfileScreen}
+        options={({ navigation }) => ({
+          header: () => (
+            <CustomHeader 
+              title="Editar Perfil"
+              showBack={true}
+              navigation={navigation}
+            />
+          ),
+        })}
+      />
+
+      <Stack.Screen 
+        name="MyRecipes" 
+        component={MyRecipesScreen}
+        options={({ navigation }) => ({
+          header: () => (
+            <CustomHeader 
+              title="Mis Recetas"
+              showBack={true}
+              navigation={navigation}
+            />
+          ),
+        })}
+      />
+
+      <Stack.Screen 
+        name="Settings" 
+        component={SettingsScreen}
+        options={({ navigation }) => ({
+          header: () => (
+            <CustomHeader 
+              title="Configuración"
+              showBack={true}
+              navigation={navigation}
+            />
+          ),
+        })}
+      />
+
+      {/* Community/Post Screens */}
+      <Stack.Screen 
+        name="PostDetail" 
+        component={PostDetailScreen}
+        options={({ navigation }) => ({
+          header: () => (
+            <CustomHeader 
+              title="Detalle de Publicación"
+              showBack={true}
+              navigation={navigation}
+            />
+          ),
+        })}
+      />
+
+      <Stack.Screen 
+        name="CreatePost" 
+        component={CreatePostScreen}
+        options={({ navigation }) => ({
+          header: () => (
+            <CustomHeader 
+              title="Crear Publicación"
+              showBack={true}
+              navigation={navigation}
+            />
+          ),
+        })}
+      />
+
+      <Stack.Screen 
+        name="EditPost" 
+        component={EditPostScreen}
+        options={({ navigation }) => ({
+          header: () => (
+            <CustomHeader 
+              title="Editar Publicación"
+              showBack={true}
+              navigation={navigation}
+            />
+          ),
+        })}
+      />
+
+      {/* Admin Screens */}
+      <Stack.Screen 
+        name="AdminDashboard" 
+        component={AdminScreen}
+        options={({ navigation }) => ({
+          header: () => (
+            <CustomHeader 
+              title="Panel de Administración"
+              showBack={true}
+              navigation={navigation}
+            />
+          ),
+        })}
+      />
+
+      <Stack.Screen 
+        name="UserManagement" 
+        component={UserManagementScreen}
+        options={({ navigation }) => ({
+          header: () => (
+            <CustomHeader 
+              title="Gestión de Usuarios"
+              showBack={true}
+              navigation={navigation}
+            />
+          ),
+        })}
+      />
+
+      <Stack.Screen 
+        name="ContentModeration" 
+        component={ContentModerationScreen}
+        options={({ navigation }) => ({
+          header: () => (
+            <CustomHeader 
+              title="Moderación de Contenido"
+              showBack={true}
+              navigation={navigation}
+            />
+          ),
+        })}
+      />
+
+      <Stack.Screen 
+        name="Reports" 
+        component={ReportsScreen}
+        options={({ navigation }) => ({
+          header: () => (
+            <CustomHeader 
+              title="Reportes"
+              showBack={true}
+              navigation={navigation}
+            />
+          ),
+        })}
+      />
+    </Stack.Navigator>
   );
 };
-
-const styles = StyleSheet.create({
-  languageButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    marginRight: 15,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-  },
-  languageFlag: {
-    fontSize: 16,
-    marginRight: 6,
-  },
-  languageText: {
-    color: 'white',
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
-  tabContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: 70,
-  },
-  tabIcon: {
-    fontSize: 22,
-    marginBottom: 4,
-  },
-  tabLabel: {
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  tabLabelFocused: {
-    fontWeight: 'bold',
-  },
-  tabIndicator: {
-    width: 6,
-    height: 3,
-    borderRadius: 2,
-    marginTop: 4,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#F9FAFB',
-  },
-  loadingText: {
-    fontSize: 18,
-    color: '#6B7280',
-  },
-});
-
-export type { AppNavigatorProps };

@@ -1,4 +1,4 @@
-// backend/routes/auth.js - MODIFICAR
+// backend/routes/auth.js - VERSIÓN CON DEBUGGING MEJORADO
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
@@ -12,13 +12,78 @@ const generateToken = (userId) => {
   });
 };
 
-// Health check
-router.get('/health', async (req, res) => {
-  res.json({
-    success: true,
-    message: 'Auth service funcionando',
-    timestamp: new Date().toISOString()
-  });
+// Login
+router.post('/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    console.log('🔐 Intento de login:', email);
+
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Por favor ingresa email y contraseña'
+      });
+    }
+
+    const user = await User.findOne({ email: email.toLowerCase().trim() });
+    if (!user) {
+      console.log('❌ Usuario no encontrado:', email);
+      return res.status(400).json({
+        success: false,
+        message: 'Credenciales inválidas'
+      });
+    }
+
+    console.log('👤 Usuario encontrado:', {
+      id: user._id,
+      username: user.username,
+      role: user.role,
+      hasPassword: !!user.password
+    });
+
+    const isPasswordValid = await user.comparePassword(password);
+    if (!isPasswordValid) {
+      console.log('❌ Password inválido para:', email);
+      return res.status(400).json({
+        success: false,
+        message: 'Credenciales inválidas'
+      });
+    }
+
+    const token = generateToken(user._id);
+
+    // ✅ RESPUESTA COMPLETA CON ROL
+    const responseData = {
+      success: true,
+      message: 'Inicio de sesión exitoso',
+      token,
+      user: {
+        id: user._id,
+        username: user.username,
+        email: user.email,
+        role: user.role, // ← ASEGURAR QUE ROLE SE ENVÍE
+        profile: user.profile
+      }
+    };
+
+    console.log('✅ Login exitoso:', {
+      userId: user._id,
+      username: user.username,
+      role: user.role,
+      tokenLength: token.length
+    });
+
+    console.log('📤 Enviando respuesta con rol:', responseData.user.role);
+
+    res.json(responseData);
+  } catch (error) {
+    console.error('❌ Error en login:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error del servidor al iniciar sesión'
+    });
+  }
 });
 
 // Registro
@@ -55,9 +120,12 @@ router.post('/register', async (req, res) => {
       });
     }
 
-    // VERIFICAR SI ES EL PRIMER USUARIO (será admin automáticamente)
+    // VERIFICAR SI ES EL PRIMER USUARIO
     const userCount = await User.countDocuments();
     const assignedRole = userCount === 0 ? 'admin' : role;
+
+    console.log('👥 Usuarios existentes:', userCount);
+    console.log('👑 Rol asignado:', assignedRole);
 
     const user = new User({
       username: username.trim(),
@@ -69,7 +137,11 @@ router.post('/register', async (req, res) => {
     await user.save();
     const token = generateToken(user._id);
 
-    console.log(`✅ Usuario registrado exitosamente: ${user._id}, Rol: ${assignedRole}`);
+    console.log(`✅ Usuario registrado exitosamente:`, {
+      id: user._id,
+      username: user.username,
+      role: user.role
+    });
 
     res.status(201).json({
       success: true,
@@ -79,7 +151,7 @@ router.post('/register', async (req, res) => {
         id: user._id,
         username: user.username,
         email: user.email,
-        role: user.role, // ← INCLUIR EL ROL EN LA RESPUESTA
+        role: user.role,
         profile: user.profile
       }
     });
@@ -92,71 +164,19 @@ router.post('/register', async (req, res) => {
   }
 });
 
-// Login (ACTUALIZAR para incluir el rol)
-router.post('/login', async (req, res) => {
-  try {
-    const { email, password } = req.body;
-
-    console.log('🔐 Intento de login:', email);
-
-    if (!email || !password) {
-      return res.status(400).json({
-        success: false,
-        message: 'Por favor ingresa email y contraseña'
-      });
-    }
-
-    const user = await User.findOne({ email: email.toLowerCase().trim() });
-    if (!user) {
-      return res.status(400).json({
-        success: false,
-        message: 'Credenciales inválidas'
-      });
-    }
-
-    const isPasswordValid = await user.comparePassword(password);
-    if (!isPasswordValid) {
-      return res.status(400).json({
-        success: false,
-        message: 'Credenciales inválidas'
-      });
-    }
-
-    const token = generateToken(user._id);
-
-    console.log(`✅ Login exitoso: ${user._id}, Rol: ${user.role}`);
-
-    res.json({
-      success: true,
-      message: 'Inicio de sesión exitoso',
-      token,
-      user: {
-        id: user._id,
-        username: user.username,
-        email: user.email,
-        role: user.role, // ← INCLUIR EL ROL EN LA RESPUESTA
-        profile: user.profile
-      }
-    });
-  } catch (error) {
-    console.error('❌ Error en login:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error del servidor al iniciar sesión'
-    });
-  }
-});
-
-// Obtener usuario actual (ACTUALIZAR para incluir el rol)
+// Obtener usuario actual
 router.get('/me', auth, async (req, res) => {
   try {
+    console.log('📋 Obteniendo datos del usuario:', req.user._id);
+    console.log('   - Rol actual:', req.user.role);
+    
     res.json({
       success: true,
       user: {
         id: req.user._id,
         username: req.user.username,
         email: req.user.email,
-        role: req.user.role, // ← INCLUIR EL ROL EN LA RESPUESTA
+        role: req.user.role,
         profile: req.user.profile
       }
     });
@@ -169,62 +189,75 @@ router.get('/me', auth, async (req, res) => {
   }
 });
 
-// Ruta especial para crear administradores (solo para desarrollo)
-router.post('/register-admin', async (req, res) => {
+// ✅ NUEVA RUTA: Actualizar rol de usuario (solo admin)
+router.patch('/users/:userId/role', auth, async (req, res) => {
   try {
-    const { username, email, password } = req.body;
-
-    console.log('👑 Creando cuenta de administrador:', { username, email });
-
-    if (!username || !email || !password) {
-      return res.status(400).json({
+    // Verificar que quien hace la petición es admin
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({
         success: false,
-        message: 'Por favor completa todos los campos'
+        message: 'No tienes permisos para realizar esta acción'
       });
     }
 
-    const existingUser = await User.findOne({
-      $or: [{ email: email.toLowerCase() }, { username }]
-    });
+    const { userId } = req.params;
+    const { newRole } = req.body;
 
-    if (existingUser) {
+    if (!['user', 'moderator', 'admin'].includes(newRole)) {
       return res.status(400).json({
         success: false,
-        message: existingUser.email === email.toLowerCase() 
-          ? 'El email ya está registrado' 
-          : 'El nombre de usuario ya existe'
+        message: 'Rol inválido'
       });
     }
 
-    const user = new User({
-      username: username.trim(),
-      email: email.toLowerCase().trim(),
-      password,
-      role: 'admin'
-    });
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { role: newRole },
+      { new: true, runValidators: true }
+    ).select('-password');
 
-    await user.save();
-    const token = generateToken(user._id);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'Usuario no encontrado'
+      });
+    }
 
-    console.log(`✅ Administrador creado exitosamente: ${user._id}`);
+    console.log(`✅ Rol actualizado: ${user.username} -> ${newRole}`);
 
-    res.status(201).json({
+    res.json({
       success: true,
-      message: 'Cuenta de administrador creada exitosamente',
-      token,
+      message: 'Rol actualizado correctamente',
       user: {
         id: user._id,
         username: user.username,
         email: user.email,
-        role: user.role,
-        profile: user.profile
+        role: user.role
       }
     });
   } catch (error) {
-    console.error('❌ Error creando administrador:', error);
+    console.error('❌ Error actualizando rol:', error);
     res.status(500).json({
       success: false,
-      message: 'Error del servidor al crear administrador'
+      message: 'Error del servidor'
+    });
+  }
+});
+
+// Logout
+router.post('/logout', auth, async (req, res) => {
+  try {
+    console.log('🚪 Logout de usuario:', req.user._id);
+    
+    res.json({
+      success: true,
+      message: 'Sesión cerrada exitosamente'
+    });
+  } catch (error) {
+    console.error('❌ Error en logout:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error del servidor'
     });
   }
 });

@@ -1,3 +1,4 @@
+// ProfileScreen.tsx - VERSIÓN COMPLETA CORREGIDA
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -7,9 +8,15 @@ import {
   ScrollView,
   StyleSheet,
   Alert,
-  ActivityIndicator
+  ActivityIndicator,
+  Platform
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
+import { useNavigation } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
+import { CommonActions } from '@react-navigation/native';
+import { RootStackParamList } from '../types';
+import { storage } from '../services/storage';
 
 type ActivityLevel = 'sedentary' | 'light' | 'moderate' | 'active' | 'very_active';
 
@@ -22,7 +29,7 @@ interface PersonalInfoForm {
   dailyCalorieGoal: string;
 }
 
-// ✅ INTERFACES PARA LOS COMPONENTES
+// INTERFACES PARA LOS COMPONENTES
 interface PersonalInfoSectionProps {
   personalInfo: PersonalInfoForm;
   handlePersonalInfoChange: (field: keyof PersonalInfoForm, value: string) => void;
@@ -73,7 +80,7 @@ interface PreferencesProps {
   styles: any;
 }
 
-// ✅ COMPONENTE PersonalInfoSection FUERA DEL ProfileScreen (CORREGIDO)
+// COMPONENTE PersonalInfoSection
 const PersonalInfoSection: React.FC<PersonalInfoSectionProps> = React.memo(({
   personalInfo,
   handlePersonalInfoChange,
@@ -155,7 +162,7 @@ const PersonalInfoSection: React.FC<PersonalInfoSectionProps> = React.memo(({
       ))}
     </View>
 
-    {/* Datos Corporales - CORREGIDO CON PROPS PARA EVITAR PROBLEMAS DE ESCRITURA */}
+    {/* Datos Corporales */}
     <View style={styles.selectorContainer}>
       <Text style={styles.label}>Datos Corporales *</Text>
       <View style={styles.inputRow}>
@@ -237,7 +244,7 @@ const PersonalInfoSection: React.FC<PersonalInfoSectionProps> = React.memo(({
   </View>
 ));
 
-// ✅ COMPONENTE HealthInfoSection FUERA DEL ProfileScreen
+// COMPONENTE HealthInfoSection
 const HealthInfoSection: React.FC<HealthInfoProps> = React.memo(({
   healthInfo,
   newAllergy,
@@ -387,7 +394,7 @@ const HealthInfoSection: React.FC<HealthInfoProps> = React.memo(({
   </View>
 ));
 
-// ✅ COMPONENTE PreferencesSection FUERA DEL ProfileScreen
+// COMPONENTE PreferencesSection
 const PreferencesSection: React.FC<PreferencesProps> = React.memo(({
   preferences,
   newCuisine,
@@ -467,7 +474,7 @@ const PreferencesSection: React.FC<PreferencesProps> = React.memo(({
   </View>
 ));
 
-// ✅ COMPONENTE PRINCIPAL ProfileScreen
+// COMPONENTE PRINCIPAL ProfileScreen
 const ProfileScreen: React.FC = () => {
   const { 
     user,
@@ -475,10 +482,13 @@ const ProfileScreen: React.FC = () => {
     updatePersonalInfo, 
     updateHealthInfo, 
     updatePreferences,
-    refreshUserProfile,
     logout,
-    loading 
+    forceLogout,
+    loading,
+    isAuthenticated
   } = useAuth();
+  
+  const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
   
   const [personalInfo, setPersonalInfo] = useState<PersonalInfoForm>({
     gender: '',
@@ -501,7 +511,6 @@ const ProfileScreen: React.FC = () => {
     dislikedIngredients: [] as string[]
   });
   
-  // ✅ Estados separados para cada input
   const [newAllergy, setNewAllergy] = useState('');
   const [newRestriction, setNewRestriction] = useState('');
   const [newCondition, setNewCondition] = useState('');
@@ -544,31 +553,97 @@ const ProfileScreen: React.FC = () => {
     }
   }, [userProfile]);
 
-  const handleLogout = () => {
+  // ✅ FUNCIÓN LOGOUT CORREGIDA - USANDO NAVEGACIÓN CORRECTA
+  const handleLogout = async () => {
+    console.log('🚪 ProfileScreen - Iniciando LOGOUT MEJORADO');
+    
+    try {
+      setSaving(true);
+      
+      // 1. Ejecutar logout del contexto (limpia estados de React)
+      console.log('🔄 Paso 1: Limpiando contexto de autenticación...');
+      await logout();
+      
+      // 2. Esperar un momento para que los estados se propaguen
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      // 3. Verificar que se limpió correctamente
+      console.log('🔍 Verificando limpieza...');
+      const tokenCheck = await storage.getToken();
+      const userCheck = await storage.getUser();
+      
+      if (tokenCheck || userCheck) {
+        console.warn('⚠️ Limpieza incompleta, ejecutando forceLogout...');
+        await forceLogout();
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
+      
+      console.log('✅ Logout completado exitosamente');
+      
+      // 4. NAVEGAR AL LOGIN - Usando CommonActions para resetear el stack
+      navigation.dispatch(
+        CommonActions.reset({
+          index: 0,
+          routes: [{ name: 'Login' }],
+        })
+      );
+      
+    } catch (error: any) {
+      console.error('❌ Error en logout:', error);
+      
+      // FALLBACK NUCLEAR: Limpiar todo manualmente
+      try {
+        console.log('💥 Ejecutando fallback nuclear...');
+        
+        // Limpiar storage directamente
+        await storage.clearAuth();
+        
+        // Si es web, limpiar también localStorage
+        if (Platform.OS === 'web') {
+          localStorage.clear();
+          sessionStorage.clear();
+        }
+        
+        // Navegar al login de todos modos
+        navigation.dispatch(
+          CommonActions.reset({
+            index: 0,
+            routes: [{ name: 'Login' }],
+          })
+        );
+        
+      } catch (fallbackError) {
+        console.error('❌ Error crítico en fallback:', fallbackError);
+        Alert.alert(
+          'Error',
+          'Hubo un problema al cerrar sesión. Por favor, cierra y vuelve a abrir la aplicación.',
+          [{ text: 'OK' }]
+        );
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const confirmLogout = () => {
     Alert.alert(
       "Cerrar sesión",
-      "¿Seguro que quieres cerrar sesión?",
+      "¿Estás seguro de que quieres cerrar sesión?",
       [
         {
           text: "Cancelar",
-          style: "cancel"
+          style: "cancel",
+          onPress: () => console.log('Logout cancelado')
         },
         {
-          text: "Cerrar sesión",
+          text: "Cerrar sesión", 
           style: "destructive",
-          onPress: async () => {
-            try {
-              await logout();
-            } catch (error) {
-              console.error("❌ Error ejecutando logout:", error);
-            }
-          },
+          onPress: handleLogout
         },
       ]
     );
   };
 
-  // ✅ Funciones para agregar items
   const handleAddAllergy = () => {
     if (newAllergy.trim()) {
       setHealthInfo(prev => ({
@@ -629,7 +704,6 @@ const ProfileScreen: React.FC = () => {
     }
   };
 
-  // Funciones para eliminar items
   const handleRemoveAllergy = (index: number) => {
     setHealthInfo(prev => ({
       ...prev,
@@ -735,7 +809,6 @@ const ProfileScreen: React.FC = () => {
     }
   }, [personalInfo.weight, personalInfo.height, personalInfo.age, personalInfo.gender, personalInfo.activityLevel]);
 
-  // ✅ FUNCIÓN saveProfile - VERSIÓN FINAL CORREGIDA
   const saveProfile = async () => {
     if (activeSection === 'personal') {
       const weight = parseFloat(personalInfo.weight) || 0;
@@ -750,8 +823,6 @@ const ProfileScreen: React.FC = () => {
 
     setSaving(true);
     try {
-      console.log('💾 Guardando perfil...');
-      
       if (activeSection === 'personal') {
         const personalData = {
           gender: personalInfo.gender,
@@ -761,44 +832,32 @@ const ProfileScreen: React.FC = () => {
           age: parseInt(personalInfo.age) || 0,
           dailyCalorieGoal: parseInt(personalInfo.dailyCalorieGoal) || 0
         };
-        
-        console.log('📤 Enviando datos personales:', personalData);
         await updatePersonalInfo(personalData);
       }
         
       if (activeSection === 'health') {
-        console.log('📤 Enviando datos de salud...');
-        
         const healthDataToSend = {
           allergies: healthInfo.allergies || [],
           dietaryRestrictions: healthInfo.dietaryRestrictions || [],
           healthConditions: healthInfo.healthConditions || [],
           healthGoals: healthInfo.healthGoals || []
         };
-        
-        console.log('📊 Datos de salud:', healthDataToSend);
         await updateHealthInfo(healthDataToSend);
       }
         
       if (activeSection === 'preferences') {
-        console.log('📤 Enviando preferencias...');
-        
         const preferencesDataToSend = {
           favoriteCuisines: preferences.favoriteCuisines || [],
           dislikedIngredients: preferences.dislikedIngredients || [],
           cookingSkills: 'beginner' as const
         };
-        
-        console.log('📊 Datos de preferencias:', preferencesDataToSend);
         await updatePreferences(preferencesDataToSend);
       }
       
-      console.log('✅ Perfil guardado exitosamente');
       Alert.alert('¡Éxito!', 'Tu información ha sido guardada correctamente.');
       
     } catch (error: any) {
       console.error('❌ Error guardando perfil:', error);
-      
       let errorMessage = 'No se pudo guardar la información. Por favor intenta nuevamente.';
       
       if (error.message?.includes('Error de conexión') || error.message?.includes('No se puede conectar')) {
@@ -834,10 +893,15 @@ const ProfileScreen: React.FC = () => {
           <Text style={styles.userEmail}>{user?.email || ''}</Text>
         </View>
         <TouchableOpacity 
-          style={styles.logoutButton} 
-          onPress={handleLogout}
+          style={[styles.logoutButton, saving && styles.disabledButton]} 
+          onPress={confirmLogout}
+          disabled={saving}
         >
-          <Text style={styles.logoutText}>🚪 Cerrar Sesión</Text>
+          {saving ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Text style={styles.logoutText}>🚪 Cerrar Sesión</Text>
+          )}
         </TouchableOpacity>
       </View>
 
@@ -868,7 +932,6 @@ const ProfileScreen: React.FC = () => {
         </TouchableOpacity>
       </View>
 
-      {/* ✅ AHORA USAMOS LOS COMPONENTES EXTERNOS CORRECTAMENTE */}
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         {activeSection === 'personal' && (
           <PersonalInfoSection
@@ -937,7 +1000,7 @@ const ProfileScreen: React.FC = () => {
   );
 };
 
-// ✅ ESTILOS (se mantienen igual)
+// ESTILOS 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -970,6 +1033,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
+  },
+  disabledButton: {
+    backgroundColor: '#ff8a80',
+    opacity: 0.7,
   },
   logoutText: {
     color: '#fff',
@@ -1231,4 +1298,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default ProfileScreen;
+export { ProfileScreen };

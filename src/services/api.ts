@@ -18,7 +18,26 @@ const getAPIUrls = (): string[] => {
 
 const API_URLS = getAPIUrls();
 const DEVELOPMENT_MODE = false;
+export const diagnoseBackend = async () => {
+  console.log('🔍 Diagnosticando backend...');
+  
+  const endpointsToCheck = [
+    '/health',
+    '/recipes/community',
+    '/recipes/my-recipes',
+    '/recipes/all', // Este es el que está fallando
+    '/questions/all'
+  ];
 
+  for (const endpoint of endpointsToCheck) {
+    try {
+      const response = await apiRequest(endpoint, { method: 'GET' });
+      console.log(`✅ ${endpoint}: DISPONIBLE`);
+    } catch (error: any) {
+      console.log(`❌ ${endpoint}: NO DISPONIBLE - ${error.message}`);
+    }
+  }
+};
 // ✅ FUNCIÓN DETECTBASEURL CORREGIDA - UNA SOLA DECLARACIÓN
 export const detectBaseURL = async (): Promise<string> => {
   console.log('🔍 Detectando URL del backend...');
@@ -507,20 +526,17 @@ const mockAuthAPI = {
   }
 };
 
-// ✅ CLIENTE HTTP MEJORADO
 export const apiRequest = async (endpoint: string, options: any = {}) => {
+  const requestId = Math.random().toString(36).substring(2, 9);
+  
   try {
-    console.log(`🌐 API Request: ${endpoint}`, options.method || 'GET');
+    console.log(`🌐 [${requestId}] API Request: ${endpoint}`, options.method || 'GET');
     
     const token = await storage.getToken();
-    console.log('🔑 Token disponible:', token ? 'Sí' : 'No');
-    
-    if (token) {
-      console.log('🔑 Token length:', token.length);
-    }
+    console.log(`🔑 [${requestId}] Token disponible:`, token ? `Sí (${token.length} chars)` : 'No');
 
     const config = {
-      baseURL: process.env.REACT_APP_API_URL || 'http://localhost:3001/api',
+      baseURL: API_BASE_URL === 'DEV_MODE' ? 'http://localhost:3001/api' : API_BASE_URL,
       url: endpoint,
       method: options.method || 'GET',
       headers: {
@@ -532,28 +548,47 @@ export const apiRequest = async (endpoint: string, options: any = {}) => {
       timeout: options.timeout || 15000,
     };
 
-    console.log('📤 Configuración de request:', {
+    console.log(`📤 [${requestId}] Configuración completa:`, {
       url: config.baseURL + config.url,
       method: config.method,
       hasAuth: !!token,
-      data: config.data
+      hasData: !!options.data,
+      data: options.data ? { ...options.data, password: options.data.password ? '***' : undefined } : undefined,
+      timeout: config.timeout
     });
 
+    const startTime = Date.now();
     const response = await axios(config);
+    const endTime = Date.now();
     
-    console.log(`✅ Response ${endpoint}:`, response.data);
+    console.log(`✅ [${requestId}] Response recibido en ${endTime - startTime}ms:`, {
+      status: response.status,
+      success: response.data?.success,
+      message: response.data?.message
+    });
+    
     return response.data;
   } catch (error: any) {
-    console.error(`❌ Error en request ${endpoint}:`, error.response?.data || error.message);
+    console.error(`❌ [${requestId}] Error en request ${endpoint}:`, {
+      message: error.message,
+      code: error.code,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data,
+      config: {
+        url: error.config?.baseURL + error.config?.url,
+        method: error.config?.method
+      }
+    });
     
     if (error.response?.status === 401) {
-      console.log('🔐 Error 401 - Token inválido o expirado');
+      console.log(`🔐 [${requestId}] Error 401 - Token inválido o expirado`);
       
       // Limpiar datos de autenticación
       await storage.clearAuth();
       
       // Redirigir al login si estamos en un entorno con router
-      if (window.location.pathname !== '/login') {
+      if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
         window.location.href = '/login';
       }
       
@@ -561,7 +596,8 @@ export const apiRequest = async (endpoint: string, options: any = {}) => {
     }
     
     if (error.response?.data) {
-      throw new Error(error.response.data.message || error.response.data.error || 'Error del servidor');
+      const backendError = error.response.data;
+      throw new Error(backendError.message || backendError.error || 'Error del servidor');
     }
     
     if (error.code === 'ECONNABORTED') {
@@ -569,7 +605,7 @@ export const apiRequest = async (endpoint: string, options: any = {}) => {
     }
     
     if (error.message?.includes('Network Error')) {
-      throw new Error('No se puede conectar al servidor. Verifica que esté ejecutándose.');
+      throw new Error('No se puede conectar al servidor. Verifica que esté ejecutándose en http://localhost:3001');
     }
     
     throw new Error(error.message || 'Error desconocido');
@@ -667,67 +703,119 @@ const searchRecipesStrategy = async (params: any): Promise<Recipe[]> => {
   
   return recipes;
 };
-
 export const authAPI = {
   async login(email: string, password: string): Promise<AuthResponse> {
-    if (DEVELOPMENT_MODE) {
-      return mockAuthAPI.login(email, password);
-    }
-
     try {
       console.log('🔐 Iniciando sesión con backend real...');
+      console.log('📧 Email enviado:', email);
+      console.log('🌐 URL base:', API_BASE_URL);
+      
+      // Preparar datos con validación adicional
+      const requestData = {
+        email: email.toLowerCase().trim(),
+        password: password
+      };
+
+      console.log('📤 Datos del request:', {
+        ...requestData,
+        password: '***' // Ocultar password en logs
+      });
+
+      // Verificar que los datos no estén vacíos
+      if (!requestData.email || !requestData.password) {
+        throw new Error('Email y contraseña son requeridos');
+      }
+
+      if (!requestData.email.includes('@')) {
+        throw new Error('Formato de email inválido');
+      }
+
+      console.log('🔄 Enviando request al backend...');
       
       const data = await apiRequest('/auth/login', {
         method: 'POST',
-        data: {
-          email: email.toLowerCase().trim(),
-          password
-        }
+        data: requestData,
+        timeout: 10000 // 10 segundos timeout
+      });
+
+      console.log('✅ Respuesta del backend recibida:', {
+        success: data.success,
+        message: data.message,
+        hasToken: !!data.token,
+        hasUser: !!data.user,
+        userRole: data.user?.role
       });
 
       if (!data.success) {
+        console.error('❌ Backend reportó error:', data.message);
         throw new Error(data.message || 'Error al iniciar sesión');
       }
 
-      console.log('✅ Login exitoso, cargando perfil completo...');
+      if (!data.token) {
+        throw new Error('No se recibió token de autenticación');
+      }
+
+      if (!data.user) {
+        throw new Error('No se recibieron datos del usuario');
+      }
+
+      console.log('✅ Login exitoso, guardando datos...');
       
       // GUARDAR USUARIO Y TOKEN INMEDIATAMENTE
+      console.log('💾 Guardando token...');
       await storage.saveToken(data.token);
+      
+      console.log('💾 Guardando usuario básico...');
       await storage.saveUser(data.user);
 
-      // CARGAR PERFIL COMPLETO DESPUÉS DEL LOGIN
-      try {
-        const userProfile = await this.getProfile();
-        const userWithProfile = {
-          ...data.user,
-          profile: userProfile
-        };
-        
-        // ACTUALIZAR USUARIO CON PERFIL COMPLETO
-        await storage.saveUser(userWithProfile);
-        
-        console.log('✅ Perfil completo cargado después del login');
-        
-        return {
-          message: data.message,
-          token: data.token,
-          user: userWithProfile
-        };
-      } catch (profileError) {
-        console.warn('⚠️ No se pudo cargar el perfil completo:', profileError);
-        // Devolver usuario básico si falla la carga del perfil
-        return {
-          message: data.message,
-          token: data.token,
-          user: data.user
-        };
-      }
+      console.log('👤 Usuario guardado:', {
+        id: data.user.id,
+        username: data.user.username,
+        email: data.user.email,
+        role: data.user.role
+      });
+
+      return {
+        message: data.message,
+        token: data.token,
+        user: data.user
+      };
+      
     } catch (error: any) {
-      console.error('Error en login:', error);
-      throw new Error(error.message);
+      console.error('❌ Error completo en login:', {
+        message: error.message,
+        stack: error.stack,
+        response: error.response?.data
+      });
+      
+      // Limpiar datos de autenticación en caso de error
+      try {
+        await storage.clearAuth();
+        console.log('🧹 Datos de autenticación limpiados debido al error');
+      } catch (clearError) {
+        console.error('❌ Error limpiando auth:', clearError);
+      }
+      
+      // Mensajes de error más específicos
+      if (error.message?.includes('Network Error') || error.code === 'ECONNABORTED') {
+        throw new Error('No se puede conectar al servidor. Verifica que el backend esté ejecutándose.');
+      }
+      
+      if (error.response?.status === 400) {
+        throw new Error('Credenciales inválidas. Verifica tu email y contraseña.');
+      }
+      
+      if (error.response?.status === 401) {
+        throw new Error('No autorizado. Tu sesión ha expirado.');
+      }
+      
+      if (error.response?.status === 500) {
+        throw new Error('Error del servidor. Intenta nuevamente más tarde.');
+      }
+      
+      throw new Error(error.message || 'Error desconocido al iniciar sesión');
     }
   },
-
   async register(username: string, email: string, password: string): Promise<AuthResponse> {
     if (DEVELOPMENT_MODE) {
       return mockAuthAPI.register(username, email, password);
@@ -800,6 +888,39 @@ export const authAPI = {
     } catch (error: any) {
       console.error('Error obteniendo usuario:', error);
       throw new Error(error.message);
+    }
+  },
+  
+  async logout(): Promise<{ success: boolean; message: string }> {
+    if (DEVELOPMENT_MODE) {
+      console.log('🚪 MODO DESARROLLO: Logout simulado');
+      await new Promise(resolve => setTimeout(resolve, 500));
+      return {
+        success: true,
+        message: 'Logout exitoso (modo desarrollo)'
+      };
+    }
+
+    try {
+      console.log('🚪 Ejecutando logout en backend...');
+      
+      const data = await apiRequest('/auth/logout', {
+        method: 'POST',
+        timeout: 5000
+      });
+
+      console.log('✅ Logout exitoso en backend');
+      return {
+        success: true,
+        message: data.message || 'Logout exitoso'
+      };
+    } catch (error: any) {
+      console.warn('⚠️ Error en logout del backend (continuando):', error.message);
+      // No lanzar error para permitir que el logout continúe
+      return {
+        success: false,
+        message: 'No se pudo notificar al backend, pero la sesión se cerró localmente'
+      };
     }
   },
 
@@ -1228,28 +1349,27 @@ export const recipesAPI = {
     return newRecipe;
   },
 
-  async updateRecipe(id: string, recipeData: Partial<Recipe>, token: string): Promise<Recipe> {
-    console.log(`✏️ Actualizando receta: ${id}`);
-    const updatedRecipe = mapToValidRecipe({
-      _id: id,
-      title: recipeData.title || 'Receta Actualizada',
-      description: recipeData.description || '',
-      ingredients: recipeData.ingredients || [],
-      instructions: recipeData.instructions || [],
-      preparationTime: recipeData.preparationTime || 30,
-      servings: recipeData.servings || 4,
-      difficulty: recipeData.difficulty || 'Medio',
-      category: recipeData.category || 'General',
-      image: recipeData.image || 'https://via.placeholder.com/400x300?text=Receta+Actualizada',
-      author: recipeData.author || 'user1',
-      authorName: 'Usuario',
-      ratings: [],
-      createdAt: new Date().toISOString()
+ async updateRecipe(recipeId: string, recipeData: any): Promise<Recipe> {
+  try {
+    console.log('📝 Actualizando receta:', recipeId);
+    console.log('📦 Datos a actualizar:', recipeData);
+    
+    const data = await apiRequest(`/recipes/${recipeId}`, {
+      method: 'PUT',
+      data: recipeData
     });
     
+    if (!data.success) {
+      throw new Error(data.message || 'Error al actualizar receta');
+    }
+    
     console.log('✅ Receta actualizada exitosamente');
-    return updatedRecipe;
-  },
+    return data.recipe;
+  } catch (error) {
+    console.error('❌ Error actualizando receta:', error);
+    throw error;
+  }
+},
 
   async deleteRecipe(id: string, token: string): Promise<void> {
     console.log(`🗑️ Eliminando receta: ${id}`);

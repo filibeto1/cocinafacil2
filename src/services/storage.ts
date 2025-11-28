@@ -57,6 +57,22 @@ const webStorage = {
   }
 };
 
+// ✅ Función debugAuth corregida
+const debugAuth = async () => {
+  console.log('🐛 DEBUG AUTH:');
+  
+  const token = await storage.getToken();
+  const storedUser = await storage.getUser();
+  
+  console.log('- Storage token:', token);
+  console.log('- Storage user:', storedUser);
+  
+  if (Platform.OS === 'web') {
+    console.log('- localStorage token:', localStorage.getItem('auth_token'));
+    console.log('- localStorage user:', localStorage.getItem('user_data'));
+  }
+};
+
 // ✅ API unificada para todos los entornos
 export const storage = {
   async saveToken(token: string): Promise<void> {
@@ -168,44 +184,42 @@ export const storage = {
     }
   },
 
- async clearAuth(): Promise<void> {
-  try {
-    console.log('🧹 CLEAR_AUTH: Iniciando limpieza de autenticación...');
+  async clearAuth(): Promise<void> {
+    console.log('🧹 STORAGE - LIMPIEZA AGRESIVA INICIADA');
     
-    console.log('🔍 CLEAR_AUTH: Limpiando token...');
-    // Limpiar token
-    if (isWeb) {
-      webStorage.removeItem('auth_token');
-      console.log('✅ CLEAR_AUTH: Token eliminado (web)');
-    } else {
-      await SecureStore.deleteItemAsync('auth_token');
-      console.log('✅ CLEAR_AUTH: Token eliminado (mobile)');
+    try {
+      // Limpiar TODO
+      if (Platform.OS === 'web') {
+        // WEB: Limpiar todo
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('user_data');
+        localStorage.removeItem('auth_state');
+        sessionStorage.removeItem('auth_token');
+        sessionStorage.removeItem('user_data');
+        
+        // Intentar limpiar también indexedDB por si acaso
+        if ('indexedDB' in window) {
+          indexedDB.databases().then(dbs => {
+            dbs.forEach(db => {
+              if (db.name) indexedDB.deleteDatabase(db.name);
+            });
+          }).catch(() => {});
+        }
+        
+        console.log('✅ Web storage limpiado completamente');
+      } else {
+        // MOBILE
+        await SecureStore.deleteItemAsync('auth_token');
+        await SecureStore.deleteItemAsync('user_data');
+        console.log('✅ SecureStore limpiado completamente');
+      }
+      
+      console.log('🧹 STORAGE - LIMPIEZA COMPLETADA');
+    } catch (error) {
+      console.error('❌ Error en clearAuth:', error);
+      // No lanzar error para no bloquear el logout
     }
-    
-    console.log('🔍 CLEAR_AUTH: Limpiando usuario...');
-    // Limpiar usuario
-    if (isWeb) {
-      webStorage.removeItem('user_data');
-      console.log('✅ CLEAR_AUTH: Usuario eliminado (web)');
-    } else {
-      await SecureStore.deleteItemAsync('user_data');
-      console.log('✅ CLEAR_AUTH: Usuario eliminado (mobile)');
-    }
-    
-    console.log('✅ CLEAR_AUTH: Datos de autenticación eliminados completamente');
-  } catch (error) {
-    if (error instanceof Error) {
-      console.error('❌ CLEAR_AUTH: Error limpiando datos:', error.message);
-      console.error('🔍 CLEAR_AUTH Stack:', error.stack);
-      throw new Error('No se pudieron limpiar los datos de autenticación: ' + error.message);
-    } else {
-      console.error('❌ CLEAR_AUTH: Error desconocido:', error);
-      throw new Error('Ocurrió un error desconocido al limpiar los datos de autenticación');
-    }
-  }
-},
-
-
+  },
 
   async clearAuthData(): Promise<void> {
     return this.clearAuth();
@@ -224,7 +238,10 @@ export const storage = {
       console.error('❌ Error clearing all storage:', error);
       throw error;
     }
-  }
+  },
+
+  // ✅ Exportar debugAuth como método
+  debugAuth
 };
 
 // ✅ Exportar funciones individuales
@@ -238,4 +255,5 @@ export const clearAuth = storage.clearAuth.bind(storage);
 export const clearAuthData = storage.clearAuthData.bind(storage);
 export const clearStorage = storage.clearAll.bind(storage);
 
-export { defaultProfile };
+// ✅ Exportar debugAuth como función independiente
+export { debugAuth, defaultProfile };

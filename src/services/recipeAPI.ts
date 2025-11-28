@@ -1,4 +1,4 @@
-// src/services/recipeAPI.ts - VERSIÓN SOLO BASE DE DATOS LOCAL
+// src/services/recipeAPI.ts - VERSIÓN COMPLETA CORREGIDA
 import { apiRequest } from './api';
 import { storage } from './storage';
 
@@ -22,7 +22,7 @@ export interface Recipe {
   preparationTime: number;
   servings: number;
   difficulty: 'Fácil' | 'Medio' | 'Difícil';
-  category: 'Desayuno' | 'Almuerzo' | 'Cena' | 'Postre' | 'Snack' | 'Bebida';
+  category: 'Desayuno' | 'Almuerzo' | 'Cena' | 'Postre' | 'Snack' | 'Bebida' | string;
   image?: string;
   author: string;
   authorName: string;
@@ -44,6 +44,120 @@ export interface PaginatedResponse {
 }
 
 export const recipeAPI = {
+  // ✅ CORREGIDO: Obtener TODAS las recetas (para admin) - Con manejo robusto de errores
+  async getAllRecipes(): Promise<Recipe[]> {
+    try {
+      console.log('📚 Obteniendo todas las recetas (admin)...');
+      
+      // Intentar primero con el endpoint específico de admin
+      let data;
+      try {
+        data = await apiRequest('/recipes/all', {
+          method: 'GET'
+        });
+        console.log('✅ Endpoint /recipes/all disponible');
+        
+        // Verificar si hay error de permisos en la respuesta
+        if (data.success === false) {
+          if (data.message?.includes('Acceso denegado') || data.message?.includes('permisos')) {
+            console.log('❌ Usuario no tiene permisos para /recipes/all:', data.message);
+            return await this.getAllRecipesAlternative();
+          }
+          throw new Error(data.message || 'Error del servidor');
+        }
+        
+      } catch (endpointError: any) {
+        console.log('⚠️ Endpoint /recipes/all no disponible, usando método alternativo...');
+        console.log('❌ Error del endpoint:', endpointError.message);
+        
+        // Usar el método alternativo como fallback
+        return await this.getAllRecipesAlternative();
+      }
+      
+      // Manejar diferentes formatos de respuesta
+      let recipes: any[] = [];
+      
+      if (Array.isArray(data)) {
+        recipes = data;
+      } else if (Array.isArray(data?.data)) {
+        recipes = data.data;
+      } else if (Array.isArray(data?.recipes)) {
+        recipes = data.recipes;
+      } else if (data?.success && Array.isArray(data.data)) {
+        recipes = data.data;
+      } else {
+        console.warn('⚠️ Formato de respuesta inesperado, usando método alternativo:', data);
+        return await this.getAllRecipesAlternative();
+      }
+      
+      console.log(`✅ ${recipes.length} recetas totales obtenidas del endpoint /recipes/all`);
+      
+      // Validar y normalizar cada receta
+      return recipes.map((recipe: any) => ({
+        _id: recipe._id || recipe.id || `temp_${Date.now()}_${Math.random()}`,
+        title: recipe.title || 'Receta sin título',
+        description: recipe.description || 'Descripción no disponible',
+        ingredients: Array.isArray(recipe.ingredients) ? recipe.ingredients : [],
+        instructions: Array.isArray(recipe.instructions) ? recipe.instructions : [],
+        category: recipe.category || 'General',
+        difficulty: recipe.difficulty || 'Medio',
+        preparationTime: recipe.preparationTime || 30,
+        servings: recipe.servings || 1,
+        image: recipe.image,
+        author: recipe.author || 'unknown',
+        authorName: recipe.authorName || (recipe.author?.username) || 'Anónimo',
+        likes: Array.isArray(recipe.likes) ? recipe.likes : [],
+        likesCount: recipe.likesCount || recipe.likes?.length || 0,
+        createdAt: recipe.createdAt || new Date().toISOString(),
+        updatedAt: recipe.updatedAt
+      }));
+    } catch (error) {
+      console.error('❌ Error crítico obteniendo todas las recetas:', error);
+      
+      // Último fallback: método alternativo
+      console.log('🔄 Usando método alternativo como último recurso...');
+      return await this.getAllRecipesAlternative();
+    }
+  },
+
+  // ✅ MÉTODO ALTERNATIVO CORREGIDO: Para cuando el endpoint /recipes/all falle
+  async getAllRecipesAlternative(): Promise<Recipe[]> {
+    try {
+      console.log('🔄 Usando método alternativo para obtener recetas...');
+      
+      // Obtener recetas de la comunidad con límite muy alto
+      const communityData = await this.getCommunityRecipes(1, 1000);
+      
+      // Si tienes endpoint de mis recetas y eres admin, podrías combinarlas
+      let myRecipes: Recipe[] = [];
+      try {
+        const myRecipesData = await this.getMyRecipes(1, 1000);
+        myRecipes = myRecipesData.recipes || [];
+      } catch (error) {
+        console.log('⚠️ No se pudieron obtener mis recetas:', error);
+      }
+      
+      // Combinar y eliminar duplicados
+      const allRecipes = [
+        ...(communityData.recipes || []), 
+        ...myRecipes
+      ];
+      
+      const uniqueRecipes = allRecipes.filter((recipe, index, self) => 
+        index === self.findIndex(r => r._id === recipe._id)
+      );
+      
+      console.log(`✅ ${uniqueRecipes.length} recetas únicas obtenidas (método alternativo)`);
+      return uniqueRecipes;
+    } catch (error) {
+      console.error('❌ Error en método alternativo:', error);
+      
+      // Si todo falla, retornar array vacío
+      console.log('🔄 Retornando array vacío...');
+      return [];
+    }
+  },
+
   // Crear nueva receta
   async createRecipe(recipeData: Omit<Recipe, '_id' | 'author' | 'authorName' | 'likes' | 'likesCount' | 'createdAt' | 'updatedAt'>): Promise<Recipe> {
     try {
@@ -81,6 +195,29 @@ export const recipeAPI = {
     }
   },
 
+  // ✅ NUEVO MÉTODO: Actualizar receta existente
+  async updateRecipe(recipeId: string, recipeData: any): Promise<Recipe> {
+    try {
+      console.log('📝 Actualizando receta:', recipeId);
+      console.log('📦 Datos a actualizar:', recipeData);
+      
+      const data = await apiRequest(`/recipes/${recipeId}`, {
+        method: 'PUT',
+        data: recipeData
+      });
+      
+      if (!data.success) {
+        throw new Error(data.message || 'Error al actualizar receta');
+      }
+      
+      console.log('✅ Receta actualizada exitosamente');
+      return data.recipe;
+    } catch (error) {
+      console.error('❌ Error actualizando receta:', error);
+      throw error;
+    }
+  },
+
   // Obtener recetas de la comunidad con paginación
   async getCommunityRecipes(page: number = 1, limit: number = 10, category?: string): Promise<PaginatedResponse> {
     try {
@@ -102,17 +239,22 @@ export const recipeAPI = {
       console.log(`📦 Recetas recibidas: ${data.recipes?.length || 0} de ${data.pagination?.totalRecipes || 0} totales`);
       
       const validatedRecipes = (data.recipes || []).map((recipe: any) => ({
-        ...recipe,
+        _id: recipe._id || recipe.id || `temp_${Date.now()}_${Math.random()}`,
         title: recipe.title || 'Receta sin título',
         description: recipe.description || 'Descripción no disponible',
-        ingredients: recipe.ingredients || [],
-        instructions: recipe.instructions || [],
+        ingredients: Array.isArray(recipe.ingredients) ? recipe.ingredients : [],
+        instructions: Array.isArray(recipe.instructions) ? recipe.instructions : [],
         category: recipe.category || 'General',
         difficulty: recipe.difficulty || 'Medio',
         preparationTime: recipe.preparationTime || 30,
         servings: recipe.servings || 1,
-        likesCount: recipe.likesCount || 0,
-        authorName: recipe.authorName || 'Anónimo'
+        image: recipe.image,
+        author: recipe.author || 'unknown',
+        authorName: recipe.authorName || 'Anónimo',
+        likes: Array.isArray(recipe.likes) ? recipe.likes : [],
+        likesCount: recipe.likesCount || recipe.likes?.length || 0,
+        createdAt: recipe.createdAt || new Date().toISOString(),
+        updatedAt: recipe.updatedAt
       }));
       
       return {
@@ -127,7 +269,18 @@ export const recipeAPI = {
       };
     } catch (error) {
       console.error('❌ Error obteniendo recetas de la comunidad:', error);
-      throw error;
+      
+      // En caso de error, retornar estructura vacía pero válida
+      return {
+        recipes: [],
+        pagination: {
+          currentPage: page,
+          totalPages: 1,
+          totalRecipes: 0,
+          hasNextPage: false,
+          hasPrevPage: false
+        }
+      };
     }
   },
 
@@ -144,17 +297,22 @@ export const recipeAPI = {
       }
       
       const validatedRecipes = (data.recipes || []).map((recipe: any) => ({
-        ...recipe,
+        _id: recipe._id || recipe.id || `temp_${Date.now()}_${Math.random()}`,
         title: recipe.title || 'Receta sin título',
         description: recipe.description || 'Descripción no disponible',
-        ingredients: recipe.ingredients || [],
-        instructions: recipe.instructions || [],
+        ingredients: Array.isArray(recipe.ingredients) ? recipe.ingredients : [],
+        instructions: Array.isArray(recipe.instructions) ? recipe.instructions : [],
         category: recipe.category || 'General',
         difficulty: recipe.difficulty || 'Medio',
         preparationTime: recipe.preparationTime || 30,
         servings: recipe.servings || 1,
-        likesCount: recipe.likesCount || 0,
-        authorName: recipe.authorName || 'Anónimo'
+        image: recipe.image,
+        author: recipe.author || 'unknown',
+        authorName: recipe.authorName || 'Anónimo',
+        likes: Array.isArray(recipe.likes) ? recipe.likes : [],
+        likesCount: recipe.likesCount || recipe.likes?.length || 0,
+        createdAt: recipe.createdAt || new Date().toISOString(),
+        updatedAt: recipe.updatedAt
       }));
       
       return {
@@ -169,7 +327,18 @@ export const recipeAPI = {
       };
     } catch (error) {
       console.error('Error obteniendo mis recetas:', error);
-      throw error;
+      
+      // En caso de error, retornar estructura vacía pero válida
+      return {
+        recipes: [],
+        pagination: {
+          currentPage: page,
+          totalPages: 1,
+          totalRecipes: 0,
+          hasNextPage: false,
+          hasPrevPage: false
+        }
+      };
     }
   },
 
@@ -193,17 +362,22 @@ export const recipeAPI = {
       
       const recipe = data.recipe;
       const validatedRecipe = {
-        ...recipe,
+        _id: recipe._id || recipe.id || `temp_${Date.now()}_${Math.random()}`,
         title: recipe.title || 'Receta sin título',
         description: recipe.description || 'Descripción no disponible',
-        ingredients: recipe.ingredients || [],
-        instructions: recipe.instructions || [],
+        ingredients: Array.isArray(recipe.ingredients) ? recipe.ingredients : [],
+        instructions: Array.isArray(recipe.instructions) ? recipe.instructions : [],
         category: recipe.category || 'General',
         difficulty: recipe.difficulty || 'Medio',
         preparationTime: recipe.preparationTime || 30,
         servings: recipe.servings || 1,
-        likesCount: recipe.likesCount || 0,
-        authorName: recipe.authorName || 'Anónimo'
+        image: recipe.image,
+        author: recipe.author || 'unknown',
+        authorName: recipe.authorName || 'Anónimo',
+        likes: Array.isArray(recipe.likes) ? recipe.likes : [],
+        likesCount: recipe.likesCount || recipe.likes?.length || 0,
+        createdAt: recipe.createdAt || new Date().toISOString(),
+        updatedAt: recipe.updatedAt
       };
       
       return validatedRecipe;
@@ -226,17 +400,22 @@ export const recipeAPI = {
       }
       
       const validatedRecipes = (data.recipes || []).map((recipe: any) => ({
-        ...recipe,
+        _id: recipe._id || recipe.id || `temp_${Date.now()}_${Math.random()}`,
         title: recipe.title || 'Receta sin título',
         description: recipe.description || 'Descripción no disponible',
-        ingredients: recipe.ingredients || [],
-        instructions: recipe.instructions || [],
+        ingredients: Array.isArray(recipe.ingredients) ? recipe.ingredients : [],
+        instructions: Array.isArray(recipe.instructions) ? recipe.instructions : [],
         category: recipe.category || 'General',
         difficulty: recipe.difficulty || 'Medio',
         preparationTime: recipe.preparationTime || 30,
         servings: recipe.servings || 1,
-        likesCount: recipe.likesCount || 0,
-        authorName: recipe.authorName || 'Anónimo'
+        image: recipe.image,
+        author: recipe.author || 'unknown',
+        authorName: recipe.authorName || 'Anónimo',
+        likes: Array.isArray(recipe.likes) ? recipe.likes : [],
+        likesCount: recipe.likesCount || recipe.likes?.length || 0,
+        createdAt: recipe.createdAt || new Date().toISOString(),
+        updatedAt: recipe.updatedAt
       }));
       
       return {
@@ -251,7 +430,18 @@ export const recipeAPI = {
       };
     } catch (error) {
       console.error('Error buscando recetas:', error);
-      throw error;
+      
+      // En caso de error, retornar estructura vacía pero válida
+      return {
+        recipes: [],
+        pagination: {
+          currentPage: page,
+          totalPages: 1,
+          totalRecipes: 0,
+          hasNextPage: false,
+          hasPrevPage: false
+        }
+      };
     }
   },
 
@@ -292,5 +482,30 @@ export const recipeAPI = {
       console.error('Error eliminando receta:', error);
       throw error;
     }
+  },
+
+  // ✅ NUEVO: Función para diagnosticar endpoints disponibles
+  async diagnoseEndpoints(): Promise<{ [key: string]: boolean }> {
+    const endpoints = {
+      '/recipes/all': false,
+      '/recipes/community': false,
+      '/recipes/my-recipes': false,
+      '/recipes/search': false
+    };
+
+    console.log('🔍 Diagnosticando endpoints de recetas...');
+
+    for (const [endpoint, _] of Object.entries(endpoints)) {
+      try {
+        await apiRequest(endpoint, { method: 'GET' });
+        endpoints[endpoint as keyof typeof endpoints] = true;
+        console.log(`✅ ${endpoint}: DISPONIBLE`);
+      } catch (error) {
+        console.log(`❌ ${endpoint}: NO DISPONIBLE`);
+        endpoints[endpoint as keyof typeof endpoints] = false;
+      }
+    }
+
+    return endpoints;
   }
 };

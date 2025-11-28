@@ -4,7 +4,50 @@ const auth = require('../middleware/auth');
 const Recipe = require('../models/Recipe');
 const mongoose = require('mongoose');
 
-// Obtener todas las recetas de la comunidad
+// ============================================================================
+// RUTAS PARA ADMIN - DEBEN IR PRIMERO
+// ============================================================================
+// GET /recipes/all - Obtener TODAS las recetas (para admin y moderadores)
+router.get('/all', auth, async (req, res) => {
+  try {
+    console.log('📚 Admin/moderador solicitando todas las recetas');
+    console.log('Usuario solicitante:', req.user.username, '- Rol:', req.user.role);
+    
+    // Verificar permisos de administrador o moderador
+    if (req.user.role !== 'admin' && req.user.role !== 'moderator') {
+      console.log('❌ Acceso denegado: usuario no es admin ni moderador');
+      return res.status(403).json({
+        success: false,
+        message: 'Acceso denegado. Se requieren permisos de administrador o moderador.'
+      });
+    }
+    
+    // Obtener todas las recetas con información del autor
+    const recipes = await Recipe.find()
+      .populate('author', 'username email role')
+      .sort({ createdAt: -1 });
+    
+    console.log(`✅ ${recipes.length} recetas encontradas para admin/moderador`);
+    
+    res.json({
+      success: true,
+      data: recipes,
+      count: recipes.length
+    });
+  } catch (error) {
+    console.error('❌ Error obteniendo todas las recetas:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al obtener recetas: ' + error.message
+    });
+  }
+});
+
+// ============================================================================
+// RUTAS PÚBLICAS/COMUNIDAD
+// ============================================================================
+
+// GET /recipes/community - Obtener recetas públicas (comunidad)
 router.get('/community', async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
@@ -168,59 +211,7 @@ router.get('/search', async (req, res) => {
   } 
 });
 
-// GET /api/recipes/diagnostic/search-test
-router.get('/diagnostic/search-test', async (req, res) => {
-  try {
-    const { q = 'Tacos' } = req.query;
-    
-    console.log('🔧 DIAGNÓSTICO - Probando búsqueda con:', q);
-    
-    // 1. Verificar conexión a DB
-    const dbStatus = mongoose.connection.readyState;
-    console.log('📊 Estado de MongoDB:', dbStatus === 1 ? 'Conectado' : 'Desconectado');
-    
-    // 2. Contar recetas totales
-    const totalRecipes = await Recipe.countDocuments();
-    console.log('📈 Total de recetas en DB:', totalRecipes);
-    
-    // 3. Mostrar algunas recetas de ejemplo
-    const sampleRecipes = await Recipe.find().limit(2).select('title category');
-    console.log('📝 Recetas de ejemplo:', sampleRecipes);
-    
-    // 4. Intentar búsqueda simple
-    const searchRegex = new RegExp(q, 'i');
-    const searchResults = await Recipe.find({
-      $or: [
-        { title: searchRegex },
-        { description: searchRegex }
-      ]
-    }).limit(3).select('title category ingredients.name');
-    
-    console.log('🔍 Resultados de búsqueda:', searchResults.length);
-    
-    res.json({
-      success: true,
-      diagnostic: {
-        dbConnected: dbStatus === 1,
-        totalRecipes,
-        sampleRecipes,
-        searchQuery: q,
-        searchResults: searchResults.length,
-        results: searchResults
-      }
-    });
-    
-  } catch (error) {
-    console.error('❌ Error en diagnóstico:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message,
-      stack: error.stack
-    });
-  }
-});
-
-// En routes/recipes.js - VERIFICAR LA RUTA POST
+// Crear nueva receta
 router.post('/', auth, async (req, res) => {
   try {
     console.log('📥 Recibiendo solicitud para crear receta:', req.body);
@@ -278,7 +269,7 @@ router.post('/', auth, async (req, res) => {
   }
 });
 
-// Obtener una receta específica - ✅ ESTA RUTA DEBE IR DESPUÉS DE LAS RUTAS ESPECÍFICAS
+// Obtener una receta específica
 router.get('/:id', async (req, res) => {
   try {
     console.log('🔍 Buscando receta en BD con ID:', req.params.id);
@@ -355,36 +346,245 @@ router.post('/:id/like', auth, async (req, res) => {
   }
 });
 
-// Eliminar receta
+// ELIMINAR RECETA - VERSIÓN CORREGIDA DEFINITIVA
 router.delete('/:id', auth, async (req, res) => {
   try {
+    console.log('🗑️ SOLICITUD DE ELIMINACIÓN - INICIO');
+    console.log('👤 Usuario:', req.user.username, '- Rol:', req.user.role);
+    console.log('🆔 User ID:', req.user._id, '- Tipo:', typeof req.user._id);
+    console.log('📝 Receta ID solicitada:', req.params.id);
+    
     const recipe = await Recipe.findById(req.params.id);
     
     if (!recipe) {
+      console.log('❌ Receta no encontrada en BD');
       return res.status(404).json({
         success: false,
         message: 'Receta no encontrada'
       });
     }
 
-    if (recipe.author.toString() !== req.user._id.toString()) {
+    console.log('✅ Receta encontrada:', recipe.title);
+    console.log('👤 Autor de la receta en BD:', recipe.author, '- Tipo:', typeof recipe.author);
+
+    // ✅ COMPARACIÓN SEGURA - CONVERSIÓN EXPLÍCITA
+    const recipeAuthorId = recipe.author.toString();
+    const currentUserId = req.user._id.toString();
+    
+    console.log('🔍 IDs convertidos a string:');
+    console.log('   - Recipe Author:', recipeAuthorId);
+    console.log('   - Current User:', currentUserId);
+    
+    const isAdmin = req.user.role === 'admin';
+    const isModerator = req.user.role === 'moderator';
+    const isAuthor = recipeAuthorId === currentUserId;
+    
+    console.log('🔐 VERIFICACIÓN DE PERMISOS:');
+    console.log('   - isAdmin:', isAdmin);
+    console.log('   - isModerator:', isModerator);
+    console.log('   - isAuthor:', isAuthor);
+    console.log('   - IDs iguales:', recipeAuthorId === currentUserId);
+    console.log('   - Puede eliminar:', isAdmin || isModerator || isAuthor);
+    
+    // ✅ VERIFICACIÓN DEFINITIVA DE PERMISOS
+    if (!isAuthor && !isAdmin && !isModerator) {
+      console.log('❌ USUARIO NO TIENE PERMISOS PARA ELIMINAR');
+      console.log('   - No es autor de la receta');
+      console.log('   - No es administrador');
+      console.log('   - No es moderador');
+      
       return res.status(403).json({
         success: false,
-        message: 'No tienes permiso para eliminar esta receta'
+        message: 'No tienes permiso para eliminar esta receta. Solo el autor, administradores o moderadores pueden eliminar recetas.'
       });
     }
 
+    console.log('✅ PERMISOS CONFIRMADOS - Procediendo a eliminar...');
+
+    // Eliminar la receta
     await Recipe.findByIdAndDelete(req.params.id);
 
+    console.log(`✅ RECETA ELIMINADA: "${recipe.title}" por ${req.user.role}: ${req.user.username}`);
+    
     res.json({
       success: true,
       message: 'Receta eliminada exitosamente'
     });
   } catch (error) {
-    console.error('Error eliminando receta:', error);
+    console.error('❌ ERROR ELIMINANDO RECETA:', error);
     res.status(500).json({
       success: false,
-      message: 'Error al eliminar receta'
+      message: 'Error al eliminar receta: ' + error.message
+    });
+  }
+});
+
+// ACTUALIZAR RECETA - VERSIÓN CORREGIDA
+router.put('/:id', auth, async (req, res) => {
+  try {
+    console.log('📝 SOLICITUD DE ACTUALIZACIÓN - INICIO');
+    console.log('👤 Usuario:', req.user.username, '- Rol:', req.user.role);
+    console.log('📝 Receta ID:', req.params.id);
+    
+    const recipe = await Recipe.findById(req.params.id);
+    
+    if (!recipe) {
+      console.log('❌ Receta no encontrada');
+      return res.status(404).json({
+        success: false,
+        message: 'Receta no encontrada'
+      });
+    }
+
+    // ✅ COMPARACIÓN SEGURA PARA EDICIÓN
+    const recipeAuthorId = recipe.author.toString();
+    const currentUserId = req.user._id.toString();
+    
+    const isAdmin = req.user.role === 'admin';
+    const isModerator = req.user.role === 'moderator';
+    const isAuthor = recipeAuthorId === currentUserId;
+    
+    console.log('🔐 Verificación de permisos para edición:', {
+      isAdmin, 
+      isModerator, 
+      isAuthor,
+      recipeAuthorId,
+      currentUserId
+    });
+    
+    if (!isAuthor && !isAdmin && !isModerator) {
+      console.log('❌ Sin permisos para editar');
+      return res.status(403).json({
+        success: false,
+        message: 'No tienes permiso para editar esta receta'
+      });
+    }
+
+    // Actualizar campos permitidos
+    const allowedUpdates = [
+      'title', 
+      'description', 
+      'ingredients', 
+      'instructions', 
+      'preparationTime', 
+      'servings', 
+      'difficulty', 
+      'category', 
+      'image'
+    ];
+    
+    allowedUpdates.forEach(field => {
+      if (req.body[field] !== undefined) {
+        recipe[field] = req.body[field];
+      }
+    });
+
+    recipe.updatedAt = Date.now();
+    await recipe.save();
+
+    console.log(`✅ Receta "${recipe.title}" actualizada por ${req.user.role}: ${req.user.username}`);
+
+    res.json({
+      success: true,
+      message: 'Receta actualizada exitosamente',
+      recipe
+    });
+  } catch (error) {
+    console.error('❌ Error actualizando receta:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al actualizar receta: ' + error.message
+    });
+  }
+});
+
+// RUTA DE DIAGNÓSTICO - PARA DEBUGGING
+router.get('/debug/permissions/:id', auth, async (req, res) => {
+  try {
+    console.log('🔧 DIAGNÓSTICO DE PERMISOS - INICIO');
+    console.log('👤 Usuario:', req.user.username, 'Rol:', req.user.role);
+    console.log('🆔 User ID:', req.user._id, 'Tipo:', typeof req.user._id);
+    
+    const recipe = await Recipe.findById(req.params.id);
+    
+    if (!recipe) {
+      return res.json({
+        success: false,
+        message: 'Receta no encontrada',
+        debug: {
+          user: {
+            id: req.user._id.toString(),
+            username: req.user.username,
+            role: req.user.role
+          },
+          recipeId: req.params.id,
+          recipe: null
+        }
+      });
+    }
+
+    console.log('📝 Receta encontrada:', recipe.title);
+    console.log('👤 Autor de receta:', recipe.author, 'Tipo:', typeof recipe.author);
+    
+    // ✅ COMPARACIÓN SEGURA
+    const recipeAuthorId = recipe.author.toString();
+    const currentUserId = req.user._id.toString();
+    
+    const isAdmin = req.user.role === 'admin';
+    const isModerator = req.user.role === 'moderator';
+    const isAuthor = recipeAuthorId === currentUserId;
+    
+    console.log('🔐 Resultado verificación:', {
+      isAdmin, 
+      isModerator, 
+      isAuthor,
+      recipeAuthorId,
+      currentUserId,
+      idsMatch: recipeAuthorId === currentUserId
+    });
+
+    res.json({
+      success: true,
+      message: 'Diagnóstico completado',
+      debug: {
+        user: {
+          id: currentUserId,
+          username: req.user.username,
+          role: req.user.role
+        },
+        recipe: {
+          id: recipe._id.toString(),
+          title: recipe.title,
+          author: recipeAuthorId,
+          authorType: typeof recipe.author
+        },
+        permissions: {
+          isAdmin,
+          isModerator, 
+          isAuthor,
+          canDelete: isAdmin || isModerator || isAuthor,
+          canDeleteAsAdmin: isAdmin,
+          canDeleteAsModerator: isModerator,
+          canDeleteAsAuthor: isAuthor
+        },
+        comparison: {
+          recipeAuthorId,
+          currentUserId,
+          exactMatch: recipeAuthorId === currentUserId,
+          stringRepresentations: {
+            recipeAuthor: recipeAuthorId,
+            currentUser: currentUserId
+          }
+        }
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Error en diagnóstico:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error en diagnóstico',
+      error: error.message
     });
   }
 });

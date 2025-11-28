@@ -1,7 +1,9 @@
 import { apiRequest } from './api';
-import { Question, CreateQuestionData, CreateAnswerData } from '../types/question';
+import type { Question, CreateQuestionData, CreateAnswerData } from '../types/question';
 
-export { Question, CreateQuestionData, CreateAnswerData };
+// Usar export type para re-exportar tipos
+export type { Question, CreateQuestionData, CreateAnswerData };
+
 export const questionAPI = {
   // Obtener preguntas de una receta
   async getQuestionsByRecipe(recipeId: string): Promise<Question[]> {
@@ -16,6 +18,29 @@ export const questionAPI = {
     } catch (error) {
       console.error('❌ Error obteniendo preguntas:', error);
       throw error;
+    }
+  },
+
+  // Obtener todas las preguntas públicas - CORREGIDO
+  async getPublicQuestions(): Promise<Question[]> {
+    try {
+      console.log('💬 Obteniendo todas las preguntas...');
+      
+      const data = await apiRequest('/questions/all', {
+        method: 'GET'
+      });
+      
+      // Asegurar que siempre retornamos un array
+      const questions = Array.isArray(data) ? data : 
+                       Array.isArray(data?.questions) ? data.questions : 
+                       Array.isArray(data?.data) ? data.data : [];
+      
+      console.log(`✅ ${questions.length} preguntas obtenidas`);
+      return questions;
+    } catch (error) {
+      console.error('❌ Error obteniendo preguntas:', error);
+      // Retornar array vacío en caso de error para evitar romper la UI
+      return [];
     }
   },
 

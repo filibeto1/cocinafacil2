@@ -25,7 +25,57 @@ router.get('/recipe/:recipeId', async (req, res) => {
     });
   }
 });
-
+// GET /questions/all - Obtener TODAS las preguntas (para admin)
+router.get('/all', auth, async (req, res) => {
+  try {
+    console.log('💬 Obteniendo todas las preguntas para admin');
+    
+    const questions = await Question.find()
+      .populate('author', 'username email role')
+      .populate('recipe', 'title')
+      .populate('answers.author', 'username')
+      .sort({ createdAt: -1 });
+    
+    console.log(`✅ ${questions.length} preguntas encontradas`);
+    
+    res.json({
+      success: true,
+      data: questions
+    });
+  } catch (error) {
+    console.error('❌ Error obteniendo todas las preguntas:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al obtener preguntas'
+    });
+  }
+});
+router.get('/all', auth, async (req, res) => {
+  try {
+    console.log('💬 Obteniendo todas las preguntas para admin');
+    console.log('Usuario solicitante:', req.user.username, '- Rol:', req.user.role);
+    
+    const questions = await Question.find()
+      .populate('author', 'username email role')
+      .populate('recipe', 'title')
+      .populate('answers.author', 'username')
+      .sort({ createdAt: -1 });
+    
+    console.log(`✅ ${questions.length} preguntas encontradas`);
+    
+    res.json({
+      success: true,
+      data: questions,
+      count: questions.length
+    });
+  } catch (error) {
+    console.error('❌ Error obteniendo todas las preguntas:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al obtener preguntas'
+    });
+  }
+});
 // Crear nueva pregunta
 router.post('/', auth, async (req, res) => {
   try {

@@ -55,7 +55,7 @@ const recipeSchema = new mongoose.Schema({
   },
   category: {
     type: String,
-    enum: ['Desayuno', 'Almuerzo', 'Cena', 'Postre', 'Snack', 'Bebida', 'General'], // ✅ AGREGADO 'General'
+    enum: ['Desayuno', 'Almuerzo', 'Cena', 'Postre', 'Snack', 'Bebida', 'General'],
     required: true,
     default: 'General'
   },

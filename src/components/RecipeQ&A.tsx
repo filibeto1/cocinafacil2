@@ -14,7 +14,7 @@ import {
 import { questionAPI } from '../services/questionAPI';
 import type { Question, CreateQuestionData, CreateAnswerData } from '../services/questionAPI';
 import { useAuth } from '../context/AuthContext';
-import { usePermissions } from '../hooks/usePermissions';
+
 
 interface Props {
   recipeId: string;
@@ -31,7 +31,7 @@ interface Answer {
 
 export const RecipeQA: React.FC<Props> = ({ recipeId }) => {
   const { user } = useAuth();
-  const { canDelete, canManageContent } = usePermissions();
+const { canDelete, canManageContent } = useAuth();
   const [questions, setQuestions] = useState<Question[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);

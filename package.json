@@ -10,27 +10,37 @@
     "build:web": "expo build:web"
   },
   "dependencies": {
-    "@react-navigation/bottom-tabs": "^7.4.8",
-    "@react-navigation/native": "^7.1.18",
-    "@react-navigation/native-stack": "^7.3.27",
-    "@react-navigation/stack": "^7.4.9",
+    "@react-native-community/masked-view": "^0.1.11",
+    "@react-navigation/bottom-tabs": "^7.8.6",
+    "@react-navigation/elements": "^2.8.3",
+    "@react-navigation/native": "^7.1.21",
+    "@react-navigation/native-stack": "^7.7.0",
+    "@react-navigation/stack": "^7.6.7",
     "axios": "^1.12.2",
-    "babel-preset-expo": "~54.0.0",
-    "expo": "~54.0.13",
+    "expo": "~54.0.25",
     "expo-secure-store": "~15.0.7",
     "expo-status-bar": "~3.0.8",
     "react": "19.1.0",
     "react-dom": "19.1.0",
-    "react-native": "0.81.4",
+    "react-native": "^0.81.5",
     "react-native-gesture-handler": "~2.28.0",
+    "react-native-reanimated": "^4.1.5",
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",
-    "react-native-web": "^0.21.0"
+    "react-native-web": "^0.21.2"
   },
   "devDependencies": {
+    "@babel/core": "^7.28.5",
+    "@react-native-community/cli": "^20.0.2",
+    "@react-native/metro-config": "^0.82.1",
     "@types/react": "~19.1.0",
     "@types/react-dom": "~19.1.0",
-    "typescript": "~5.9.2"
+    "@types/react-native": "^0.72.8",
+    "babel-loader": "^10.0.0",
+    "babel-preset-expo": "^54.0.7",
+    "metro-react-native-babel-preset": "^0.77.0",
+    "typescript": "~5.9.2",
+    "url-loader": "^4.1.1"
   },
   "private": true
 }
